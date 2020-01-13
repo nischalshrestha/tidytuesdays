@@ -9,45 +9,57 @@ runtime: shiny
 ---
 
 ```{r setup, include=FALSE}
-library(reticulate)
 library(knitr)
+library(shiny)
+library(reticulate)
 opts_chunk$set(echo = TRUE)
 ```
 
-# Dependencies {.tabset .tabset-fade}
+<!-- ## Language {.tabset .tabset-fade} -->
 
-## R
-```{r r-deps, message=FALSE}
-library(tidyverse)
-library(scales)
-library(ggrepel)
-theme_set(theme_light())
-```
+This is the code behind an analysis of the 538 "College Major and Income" dataset from the [#tidytuesday project](https://github.com/rfordatascience/tidytuesday/tree/master/data/2018/2018-10-16).
 
-## Python
+# Python
+
+## Dependencies 
+
 ```{python py-deps}
 import pandas as pd
 import numpy as np
 ```
 
-# Reading data {.tabset .tabset-fade}
+## Reading data
 
-## R
-```{r r-reading, message=FALSE, echo=FALSE}
-recent_grads <- read_csv("recent-grads.csv")
-head(recent_grads)
-```
-
-
-## Python
 ```{python py-reading}
 recent_grads = pd.read_csv("recent-grads.csv") # side note: entering direct raw github url resulted in some parser error.
 recent_grads.head()
 ```
 
-# Data cleaning {.tabset .tabset-fade}
+## Data cleaning 
 
-## R 
+
+
+# R
+
+## Dependencies 
+
+```{r r-deps, message=FALSE}
+library(tidyverse)
+library(scales)
+library(ggrepel)
+library(plotly)
+theme_set(theme_light())
+```
+
+## Reading data
+
+```{r r-reading, message=FALSE, echo=FALSE}
+recent_grads <- read_csv("recent-grads.csv")
+head(recent_grads)
+```
+
+## Data cleaning 
+
 ```{r}
 # cleaning step
 major_processed <- recent_grads %>%
@@ -56,49 +68,43 @@ major_processed <- recent_grads %>%
         Major = fct_reorder(Major, Median))
 ```
 
-## Python
-```{python}
+Aggregating by category
 
+```{r}
+# Common pattern: group_by -> summarize -> arrange 
+by_major_category <- major_processed %>%
+    filter(!is.na(Total)) %>% 
+    group_by(Major_category) %>%
+    # summarize is nice when you need to apply different functions to columns
+    summarize(Men = sum(Men), 
+              Women = sum(Women), 
+              Total = sum(Total), 
+              # weight the medians by sample size
+              MedianSalary = sum(Median * Sample_size) / sum(Sample_size))%>%
+    mutate(ShareWomen = Women / Total) %>%
+    arrange(desc(ShareWomen))
 ```
 
+## What categories of majors make more money than others?
 
-# What categories of majors make more money than others? {.tabset .tabset-fade}
-
-## R
 ```{r}
 # visualize the distribution of salary for each major using boxplot
 major_processed %>%
     # reorder Major_category according to the Median (top -> highest salary)
     mutate(Major_category = fct_reorder(Major_category, Median)) %>%
     # Major_category as X, Median as y
-    ggplot(aes(Major_category, Median)) +
+    ggplot(aes(Major_category, Median, fill = Major_category)) +
     geom_boxplot() +
     # reformats the Median (y) as currency in $
     scale_y_continuous(labels = dollar_format()) +
     # since it's hard to read the labels for x axis, flip coords
-    coord_flip()
+    expand_limits(y = 0) +
+    coord_flip() + 
+    theme(legend.position = "none")
 ```
 
-```{r}
-# visualize the distribution of salary for each major using bar
-major_processed %>%
-    group_by(Major_category) %>%
-    summarize(Median = median(Median)) %>%
-    mutate(Major_category = fct_reorder(Major_category, Median)) %>%
-    ggplot(aes(Major_category, Median)) +
-    geom_col() +
-    scale_y_continuous(labels = dollar_format()) +
-    coord_flip()
-```
+## What are the highest earning majors? 
 
-## Python
-```{python}
-
-```
-
-# What are the highest earning majors? {.tabset .tabset-fade}
-
-## R
 ```{r major_highest_earning, fig.width=10}
 major_processed %>%
     filter(Sample_size >= 100) %>%
@@ -118,14 +124,139 @@ major_processed %>%
         y = "Median salary of graduates")
 ```
 
-## Python
+## How does gender breakdown relate to typical earnings?
+
+```{r}
+major_processed %>%
+    arrange(desc(Total)) %>%
+    head(20) %>%
+    mutate(Major = fct_reorder(Major, Total)) %>%
+    # `gather` will collapse the two columns (Women, Men) into a single Gender column where value is n 
+    # extra observations are added to df as a consequence
+    gather(Gender, Number, Women, Men) %>%
+    ggplot(aes(Major, Number, fill = Gender)) +
+    scale_y_continuous(labels = comma_format()) +
+    geom_col() +
+    coord_flip()
+```
+
+```{r fig.width=8}
+g <- major_processed %>%
+    mutate(Major_category = fct_lump(Major_category, 4)) %>% 
+    # the size gives a sense of what is a outlier or not
+    ggplot(aes(ShareWomen, Median, color = Major_category, size = Sample_size, label = Major)) +
+    geom_point() +
+    scale_x_continuous(labels = percent_format()) +
+    scale_y_continuous(labels = dollar_format()) +
+    geom_smooth(aes(group = 1), method = "lm") +
+    expand_limits(y = 0)
+# interactive graph to show each one of the aes
+ggplotly(g)
+```
+
+```{r}
+# every percentage pt a field is male, the expected salary would decrease by 23650 / 100 => ~$237
+major_processed %>%
+    select(Major, Total, ShareWomen, Sample_size, Median) %>%
+    # linear model; Median explained by ShareWomen
+    # weighted linear regression with extra weight param
+    # it tells lm that for e.g. Petroleum Engr. > Metallurgical Engr. in Sample_size
+    lm(Median ~ ShareWomen, data = ., weights = Sample_size) %>%
+    summary()
+```
+
+```{r}
+# woa there
+library(broom)
+major_processed %>% 
+  select(Major, Major_category, Total, ShareWomen, Sample_size, Median) %>% 
+  # dplyr 
+  add_count(Major_category) %>% 
+  filter(n >= 10) %>% 
+  nest(-Major_category) %>% 
+  mutate(model = map(data, ~ lm(Median ~ ShareWomen, data = ., weights = Sample_size)),
+         tidied = map(model, tidy)) %>% 
+  unnest(tidied) %>% 
+  filter(term == "ShareWomen") %>% 
+  arrange(estimate) %>% 
+  mutate(fdr = p.adjust(p.value, method = "fdr"))
+```
+
+### Appendix
 
 
+```{r}
+major_processed %>%
+    filter(Sample_size >= 100) %>%
+    ggplot(aes(Sample_size, Median)) +
+    geom_point() +
+    geom_text(aes(label = Major), check_overlap = TRUE, vjust = 1, hjust = 1) +
+    scale_x_log10()
+```
 
-# What are the lowest earning majors? {.tabset .tabset-fade}
+```{r}
+# this is so that the rest of the Rmd gets ignored 
+knitr::knit_exit()
+```
+
+Scrap
+
+```{r}
+major_processed %>% 
+  filter(Sample_size >= 100) %>% 
+  mutate(IQR = P75th - P25th) %>% 
+  arrange(desc(IQR)) %>% 
+  View()
+```
 
 
-## R
+## Most common major
+
+What were the most common **majors**? (since there were 173 we're only showing some)
+
+```{r common_majors, fig.width=10}
+major_processed %>%
+    mutate(Major = fct_reorder(Major, Total)) %>%
+    arrange(desc(Total)) %>%
+    head(20) %>%
+    ggplot(aes(Major, Total, fill = Major_category)) +
+    geom_col() +
+    coord_flip() +
+    scale_y_continuous(labels = comma_format()) +
+    labs(x = "",
+        y = "Total # of graduates")
+```
+
+## Most common major categories
+
+What major categories were most common?
+
+```{r}
+major_processed %>%
+    count(Major_category, wt = Total, sort = TRUE) %>%
+    mutate(Major_category = fct_reorder(Major_category, n)) %>%
+    ggplot(aes(Major_category, n, fill = Major_category)) +
+    geom_col() +
+    coord_flip() +
+    labs(x = "",
+        y = "Total # of graduates") +
+    theme(legend.position = "none")
+```
+
+```{r}
+# visualize the distribution of salary for each major using bar
+major_processed %>%
+    group_by(Major_category) %>%
+    summarize(Median = median(Median)) %>%
+    mutate(Major_category = fct_reorder(Major_category, Median)) %>%
+    ggplot(aes(Major_category, Median)) +
+    geom_col() +
+    scale_y_continuous(labels = dollar_format()) +
+    coord_flip()
+```
+
+## What are the lowest earning majors?
+
 ```{r major_lowest_earning, fig.width=10}
 major_processed %>%
     filter(Sample_size >= 100) %>%
@@ -143,147 +274,4 @@ major_processed %>%
         x = "",
         y = "Median salary of graduates")
 ```
-
-```{r}
-major_processed %>%
-    filter(Sample_size >= 100) %>%
-    ggplot(aes(Sample_size, Median)) +
-    geom_point() +
-    geom_text(aes(label = Major), check_overlap = TRUE, vjust = 1, hjust = 1) +
-    scale_x_log10()
-```
-
-## Python
-```{python}
-
-
-```
-
-# Most common major categories  {.tabset .tabset-fade}
-
-What major categories were most common?
-
-## R
-```{r}
-major_processed %>%
-    count(Major_category, wt = Total, sort = TRUE) %>%
-    mutate(Major_category = fct_reorder(Major_category, n)) %>%
-    ggplot(aes(Major_category, n)) +
-    geom_col() +
-    coord_flip() +
-    labs(x = "",
-        y = "Total # of graduates") +
-    # rainbow color not appearing tho :(
-    theme(legend.position = "none")
-```
-
-
-
-## Python
-
-
-
-
-# Most common major {.tabset .tabset-fade}
-
-What were the most common **majors**? (since there were 173 we're only showing some)
-
-## R
-```{r common_majors, fig.width=10}
-major_processed %>%
-    mutate(Major = fct_reorder(Major, Total)) %>%
-    arrange(desc(Total)) %>%
-    head(20) %>%
-    ggplot(aes(Major, Total, fill = Major_category)) +
-    geom_col() +
-    coord_flip() +
-    scale_y_continuous(labels = comma_format()) +
-    labs(x = "",
-        y = "Total # of graduates")
-```
-
-
-## Python
-
-
-# How does gender breakdown relate to typical earnings? {.tabset .tabset-fade}
-
-
-## R
-```{r}
-major_processed %>%
-    arrange(desc(Total)) %>%
-    head(20) %>%
-    mutate(Major = fct_reorder(Major, Total)) %>%
-    # `gather` will collapse the two columns (Women, Men) into a single Gender column where value is n 
-    # extra observations are added to df as a consequence
-    gather(Gender, Number, Women, Men) %>%
-    ggplot(aes(Major, Number, fill = Gender)) +
-    scale_y_continuous(labels = comma_format()) +
-    geom_col() +
-    coord_flip()
-```
-
-```{r}
-# Common pattern: group_by -> summarize -> arrange 
-by_major_category <- major_processed %>%
-    filter(!is.na(Total)) %>% 
-    group_by(Major_category) %>%
-    # summarize is nice when you need to apply different functions to columns
-    summarize(Men = sum(Men), 
-              Women = sum(Women), 
-              Total = sum(Total), 
-              # weight the medians by sample size
-              MedianSalary = sum(Median * Sample_size) / sum(Sample_size))%>%
-    mutate(ShareWomen = Women / Total) %>%
-    arrange(desc(ShareWomen))
-```
-
-```{r}
-major_processed %>%
-    ggplot(aes(ShareWomen, Median)) +
-    geom_point() +
-    geom_smooth(method = "lm") +
-#     geom_text() +
-    expand_limits(y = 0)
-```
-
-```{r}
-# every percentage pt a field is male, the expected salary would decrease by 23650 / 100 => ~$237
-major_processed %>%
-    select(Major, Total, ShareWomen, Sample_size, Median) %>%
-    # linear model; Median explained by ShareWomen
-    # weighted linear regression with extra weight param
-    # it tells lm that for e.g. Petroleum Engr. > Metallurgical Engr. in Sample_size
-    lm(Median ~ ShareWomen, data = ., weight = Sample_size) %>%
-    summary()
-```
-
-## Python
-
-
-<!-- # Something  -->
-
-
-<!-- ## R -->
-<!-- ```{r} -->
-<!-- # every percentage pt a field is male, the expected salary would decrease by 23650 / 100 => ~$237 -->
-<!-- major_processed %>% -->
-<!--     select(Major, Total, ShareWomen, Sample_size, Median) %>% -->
-<!--     # linear model; Median explained by ShareWomen -->
-<!--     # weighted linear regression with extra weight param -->
-<!--     # it tells lm that for e.g. Petroleum Engr. > Metallurgical Engr. in Sample_size -->
-<!--     lm(Median ~ ShareWomen, data = ., weight = Sample_size) %>% -->
-<!--     summary() -->
-<!-- ``` -->
-
-
-<!-- ## Python -->
-
-
-
-
-
-
-
 
