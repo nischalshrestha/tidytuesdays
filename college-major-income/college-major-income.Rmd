@@ -9,21 +9,20 @@ runtime: shiny
 ---
 
 ```{r setup, include=FALSE}
-library(knitr)
 library(shiny)
 library(reticulate)
-opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = TRUE)
 ```
 
 <!-- ## Language {.tabset .tabset-fade} -->
 
-This is the code behind an analysis of the 538 "College Major and Income" dataset from the [#tidytuesday project](https://github.com/rfordatascience/tidytuesday/tree/master/data/2018/2018-10-16).
+This is Dave's [code](https://github.com/dgrtwo/data-screencasts/blob/master/college-majors.Rmd) behind an analysis of the 538 "College Major and Income" dataset from the [#tidytuesday project](https://github.com/rfordatascience/tidytuesday/tree/master/data/2018/2018-10-16).
 
 # Dependencies {.tabset .tabset-fade}
 
 ## R
 
-```{r r-deps, message=FALSE}
+```{r r-deps, echo=TRUE, message=FALSE}
 library(tidyverse)
 library(scales)
 library(ggrepel)
@@ -36,13 +35,15 @@ theme_set(theme_light())
 ```{python}
 import pandas as pd
 import numpy as np
+
+pd.set_option('display.max_columns', 500)
 ```
 
 # Reading data {.tabset .tabset-fade}
 
 ## R
 
-```{r}
+```{r echo=TRUE}
 recent_grads <- read_csv("recent-grads.csv")
 head(recent_grads)
 ```
@@ -91,14 +92,24 @@ by_major_category <- major_processed %>%
               Women = sum(Women),
               Total = sum(Total),
               # weight the medians by sample size
-              MedianSalary = sum(Median * Sample_size) / sum(Sample_size))%>%
+              MedianSalary = sum(Median * Sample_size) / sum(Sample_size)) %>%
     mutate(ShareWomen = Women / Total) %>%
     arrange(desc(ShareWomen))
+by_major_category
 ```
 
 ## Python
 ```{python}
-
+# There might be a better way to do this, but what's clunky here is that MedianSalary and ShareWomen can't be
+# declared withing the agg()
+by_major_category = major_processed[major_processed.Total.notnull()] \
+  .groupby('Major_category')['Men', 'Women', 'Total'].sum()
+by_major_category['MedianSalary'] = major_processed \
+  .groupby('Major_category') \
+  .apply(lambda x: sum(x.Median * x.Sample_size) / sum(x.Sample_size))
+by_major_category['ShareWomen'] = by_major_category['Women'] / by_major_category['Total']
+by_major_category.sort_values('ShareWomen', ascending=False, inplace=True)
+by_major_category
 ```
 
 <!-- ## What categories of majors make more money than others? -->
