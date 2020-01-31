@@ -101,10 +101,10 @@ by_major_category
 ## Python
 ```{python}
 # There might be a better way to do this, but what's clunky here is that MedianSalary and ShareWomen can't be
-# declared withing the agg()
+# declared within the agg()
 by_major_category = major_processed[major_processed.Total.notnull()] \
   .groupby('Major_category')['Men', 'Women', 'Total'].sum()
-by_major_category['MedianSalary'] = major_processed \
+by_major_category['MedianSalary'] = major_processed[major_processed.Total.notnull()] \
   .groupby('Major_category') \
   .apply(lambda x: sum(x.Median * x.Sample_size) / sum(x.Sample_size))
 by_major_category['ShareWomen'] = by_major_category['Women'] / by_major_category['Total']
