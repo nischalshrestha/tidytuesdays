@@ -11,7 +11,7 @@ runtime: shiny
 ```{r setup, include=FALSE}
 library(shiny)
 library(reticulate)
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
 ```
 
 <!-- ## Language {.tabset .tabset-fade} -->
@@ -35,6 +35,8 @@ theme_set(theme_light())
 ```{python}
 import pandas as pd
 import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 pd.set_option('display.max_columns', 500)
 ```
@@ -74,8 +76,9 @@ major_processed[c('Major', 'Median')]
 ```{python}
 import string
 major_processed = recent_grads.sort_values(by='Median', ascending=False)
-major_processed['Major'] = major_processed['Major'].apply(string.capwords)
-major_processed['Major'] = major_processed['Major'][(-major_processed['Median']).argsort()]
+# mutate(Major = str_to_title(Major), -> use pandas apply w. string.capwords
+#         Major = fct_reorder(Major, Median)) -> just subset w. [ using -Median and index with the sorted indices
+major_processed['Major'] = major_processed['Major'].apply(string.capwords)[(-major_processed['Median']).argsort()]
 major_processed[['Major', 'Median']]
 ```
 
@@ -100,35 +103,63 @@ by_major_category
 
 ## Python
 ```{python}
-# There might be a better way to do this, but what's clunky here is that MedianSalary and ShareWomen can't be
-# declared within the agg()
-by_major_category = major_processed[major_processed.Total.notnull()] \
-  .groupby('Major_category')['Men', 'Women', 'Total'].sum()
-by_major_category['MedianSalary'] = major_processed[major_processed.Total.notnull()] \
-  .groupby('Major_category') \
-  .apply(lambda x: sum(x.Median * x.Sample_size) / sum(x.Sample_size))
+# R -> pandas challenge (help!):
+# There might be a better way to do this, but can't figure out how MedianSalary and ShareWomen can be 
+# declared within the agg() like you could with R's summerise
+
+# Workaround (which is actually fewer lines):
+# For now, setting with breaking things up into statements
+by_major_category_grp = major_processed[major_processed.Total.notnull()].groupby('Major_category')
+# Do the groupby / sum on the Men, Women, Total
+by_major_category = by_major_category_grp['Men', 'Women', 'Total'].sum()
+# Before creating the MedianSalary column.
+by_major_category['MedianSalary'] =  by_major_category_grp.apply(lambda x: sum(x.Median * x.Sample_size) / sum(x.Sample_size))
+# Transform ShareWomen
 by_major_category['ShareWomen'] = by_major_category['Women'] / by_major_category['Total']
 by_major_category.sort_values('ShareWomen', ascending=False, inplace=True)
 by_major_category
 ```
 
-<!-- ## What categories of majors make more money than others? -->
+# What categories of majors make more money than others?  {.tabset .tabset-fade}
 
-<!-- ```{r} -->
-<!-- # visualize the distribution of salary for each major using boxplot -->
-<!-- major_processed %>% -->
-<!--     # reorder Major_category according to the Median (top -> highest salary) -->
-<!--     mutate(Major_category = fct_reorder(Major_category, Median)) %>% -->
-<!--     # Major_category as X, Median as y -->
-<!--     ggplot(aes(Major_category, Median, fill = Major_category)) + -->
-<!--     geom_boxplot() + -->
-<!--     # reformats the Median (y) as currency in $ -->
-<!--     scale_y_continuous(labels = dollar_format()) + -->
-<!--     # since it's hard to read the labels for x axis, flip coords -->
-<!--     expand_limits(y = 0) + -->
-<!--     coord_flip() +  -->
-<!--     theme(legend.position = "none") -->
-<!-- ``` -->
+
+## R
+```{r}
+# visualize the distribution of salary for each major using boxplot
+major_processed %>%
+    # reorder Major_category according to the Median (top -> highest salary)
+    mutate(Major_category = fct_reorder(Major_category, Median)) %>%
+    # Major_category as X, Median as y
+    ggplot(aes(Major_category, Median, fill = Major_category)) +
+    geom_boxplot() +
+    # reformats the Median (y) as currency in $
+    scale_y_continuous(labels = dollar_format()) +
+    # since it's hard to read the labels for x axis, flip coords
+    expand_limits(y = 0) +
+    coord_flip() +
+    theme(legend.position = "none")
+```
+
+## Python
+```{python fig.width = 20, fig.height = 12}
+major_processed_dist_salary = major_processed.copy()
+# reorder Major_category according to the Median (top -> highest salary)
+# Gotcha: you can't use normal [ subsetting, you need something like iloc
+# Wrong
+# major_processed_dist_salary['Major_category'][-(major_processed_dist_salary['Median']).argsort()]
+# Right
+major_processed_dist_salary['Major_category'] = (
+  major_processed_dist_salary['Major_category']
+  .iloc[(-major_processed_dist_salary['Median']).argsort()]
+)
+# seaborn/matplotlib why are you like this? 
+# limitations: there isn't an equivalent expand_limits so I had to use xlim and set the proper upper bound to include 
+# the Engineering outlier
+plt.xlim(0, major_processed_dist_salary['Median'].max() + 1000)
+ax = sns.boxplot(y = 'Major_category', x = 'Median', data = major_processed_dist_salary, orient='h')
+ax.set_xticklabels(list('$' + str(int(x)) for x in ax.get_xticks()))
+ax.set_ylabel('Major_category',labelpad = 1)
+```
 
 <!-- ## What are the highest earning majors?  -->
 
