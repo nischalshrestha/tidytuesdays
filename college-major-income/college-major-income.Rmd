@@ -36,6 +36,7 @@ theme_set(theme_light())
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.ticker as ticker
 import seaborn as sns
 
 pd.set_option('display.max_columns', 500)
@@ -68,7 +69,7 @@ major_processed <- recent_grads %>%
     # change all caps to words with first letter capitalized
     mutate(Major = str_to_title(Major), 
         Major = fct_reorder(Major, Median))
-major_processed[c('Major', 'Median')]
+head(major_processed[c('Major', 'Median')], 15)
 ```
 
 ## Python
@@ -79,13 +80,16 @@ major_processed = recent_grads.sort_values(by='Median', ascending=False)
 # mutate(Major = str_to_title(Major), -> use pandas apply w. string.capwords
 #         Major = fct_reorder(Major, Median)) -> just subset w. [ using -Median and index with the sorted indices
 major_processed['Major'] = major_processed['Major'].apply(string.capwords)[(-major_processed['Median']).argsort()]
-major_processed[['Major', 'Median']]
+# Gotcha: argsort() will mess up row index order for tied Median, even setting the kind param of argsort didn't work
+major_processed.sort_index(inplace = True)
+major_processed[['Major', 'Median']].head(15)
 ```
 
 # Aggregating by category {.tabset .tabset-fade}
 
 ## R
 ```{r}
+head(major_processed[c('Major', 'Median')], 10)
 # Common pattern: group_by -> summarize -> arrange
 by_major_category <- major_processed %>%
     filter(!is.na(Total)) %>%
@@ -138,27 +142,31 @@ major_processed %>%
     expand_limits(y = 0) +
     coord_flip() +
     theme(legend.position = "none")
+
+major_processed %>%
+    # reorder Major_category according to the Median (top -> highest salary)
+    mutate(Major_category = fct_reorder(Major_category, Median)) %>%
+    select(Major, Major_category, Median) 
 ```
 
 ## Python
-```{python fig.width = 20, fig.height = 12}
+```{python warning = FALSE, message = FALSE}
 major_processed_dist_salary = major_processed.copy()
 # reorder Major_category according to the Median (top -> highest salary)
-# Gotcha: you can't use normal [ subsetting, you need something like iloc
-# Wrong
-# major_processed_dist_salary['Major_category'][-(major_processed_dist_salary['Median']).argsort()]
-# Right
-major_processed_dist_salary['Major_category'] = (
-  major_processed_dist_salary['Major_category']
-  .iloc[(-major_processed_dist_salary['Median']).argsort()]
-)
-# seaborn/matplotlib why are you like this? 
+# I'm sure there's a better way, but one way to replicate `fct_reorder` is to do a groupby -> agg -> sort_values
+cat_order = major_processed_dist_salary.groupby('Major_category').agg('median').sort_values('Median', ascending=False).index.values.tolist()
+# seaborn/matplotlib why are you like this? are there better ways?
 # limitations: there isn't an equivalent expand_limits so I had to use xlim and set the proper upper bound to include 
 # the Engineering outlier
-plt.xlim(0, major_processed_dist_salary['Median'].max() + 1000)
-ax = sns.boxplot(y = 'Major_category', x = 'Median', data = major_processed_dist_salary, orient='h')
-ax.set_xticklabels(list('$' + str(int(x)) for x in ax.get_xticks()))
-ax.set_ylabel('Major_category',labelpad = 1)
+_ = plt.xlim(0, major_processed_dist_salary['Median'].max() + 1000)
+ax = sns.boxplot(
+      x = 'Median',
+      y = 'Major_category', 
+      data = major_processed_dist_salary,
+      order = cat_order)
+_ = ax.xaxis.set_major_formatter(ticker.FormatStrFormatter('$%1.f'))
+plt.tight_layout()
+plt.show()
 ```
 
 <!-- ## What are the highest earning majors?  -->
