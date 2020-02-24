@@ -147,7 +147,6 @@ major_processed %>%
 ## Python
 ```{python warning = FALSE, message = FALSE}
 major_processed_dist_salary = major_processed.copy()
-ax.clear()
 # reorder Major_category according to the Median (top -> highest salary)
 # I'm sure there's a better way, but one way to replicate `fct_reorder` is to do a groupby -> agg -> sort_values
 cat_order = major_processed_dist_salary.groupby('Major_category').agg('median').sort_values('Median', ascending=False).index.values.tolist()
@@ -171,7 +170,7 @@ plt.show()
 
 ## R
 
-```{r major_highest_earning, fig.width=20}
+```{r major_highest_earning}
 major_processed %>%
     filter(Sample_size >= 100) %>%
     head(20) %>%
@@ -191,12 +190,9 @@ major_processed %>%
 ```
 
 ## Python
-
-## Python
-```{python warning = FALSE, message = FALSE, fig.width=20}
+```{python warning = FALSE, message = FALSE}
 major_processed_highest_earning = major_processed.copy().query('Sample_size >= 100').head(20)
-ax.clear()
-# problem: the majors on the x-axis is sorted differently in Python... 
+# problem: the majors on the x-axis is sorted differently in Python and the error bars don't look right
 ax = sns.pointplot(
       y = 'Major', 
       x = 'Median',
@@ -209,19 +205,17 @@ _ = plt.xlim(0, major_processed_dist_salary['Median'].max() + 1000)
 # put $ in front of Median x-axis tick labels
 _ = ax.xaxis.set_major_formatter(ticker.StrMethodFormatter('${x:,.0f}'))
 # set the legend outside of the plot, slightly above the plot
-plt.legend(bbox_to_anchor = (0.75, 1.01), loc = 'lower right', borderaxespad = 0.)
-# get the lower and upper 25th/75th percentile for error bar
-lower_quartile = major_processed_highest_earning.groupby('Major')['Median'].apply(np.percentile, 25).values
-upper_quartile = major_processed_highest_earning.groupby('Major')['Median'].apply(np.percentile, 75).values
-major_processed_highest_earning.groupby('Major')['Major','Median'].head(20)
-lower_quartile
+_ = plt.legend(bbox_to_anchor = (1.05, .0), loc = 'lower right', borderaxespad = 0.)
+# get the lower and upper 25th/75th percentile for error bar (not sure if this is the way) did the *.25 to make bars smaller
+lower_quartile = major_processed_highest_earning.groupby('Major')['Median'].apply(np.percentile, 25).values*.25
+upper_quartile = major_processed_highest_earning.groupby('Major')['Median'].apply(np.percentile, 75).values*.25
+quartiles = [lower_quartile, upper_quartile]
 # add error bar to each major 
 # limitation: couldn't figure out how to make color be the hue (Major_category)! :(
-plt.errorbar(
-  major_processed_highest_earning.Median, 
-  major_processed_highest_earning.Major, 
-  xerr = quartiles, capsize = 6, elinewidth = 2, linewidth = 2, fmt = 'o', ecolor='lightgrey')
-plt.tight_layout()
+_ = plt.errorbar(
+      major_processed_highest_earning.Median, 
+      major_processed_highest_earning.Major, 
+      xerr = quartiles, capsize = 6, elinewidth = 2, linewidth = 2, fmt = 'o', ecolor='lightgrey')
 plt.show()
 ```
 
