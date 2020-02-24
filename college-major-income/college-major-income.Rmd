@@ -142,53 +142,88 @@ major_processed %>%
     expand_limits(y = 0) +
     coord_flip() +
     theme(legend.position = "none")
-
-major_processed %>%
-    # reorder Major_category according to the Median (top -> highest salary)
-    mutate(Major_category = fct_reorder(Major_category, Median)) %>%
-    select(Major, Major_category, Median) 
 ```
 
 ## Python
 ```{python warning = FALSE, message = FALSE}
 major_processed_dist_salary = major_processed.copy()
+ax.clear()
 # reorder Major_category according to the Median (top -> highest salary)
 # I'm sure there's a better way, but one way to replicate `fct_reorder` is to do a groupby -> agg -> sort_values
 cat_order = major_processed_dist_salary.groupby('Major_category').agg('median').sort_values('Median', ascending=False).index.values.tolist()
 # seaborn/matplotlib why are you like this? are there better ways?
-# limitations: there isn't an equivalent expand_limits so I had to use xlim and set the proper upper bound to include 
-# the Engineering outlier
 _ = plt.xlim(0, major_processed_dist_salary['Median'].max() + 1000)
 ax = sns.boxplot(
       x = 'Median',
-      y = 'Major_category', 
+      y = 'Major_category',
       data = major_processed_dist_salary,
       order = cat_order)
-_ = ax.xaxis.set_major_formatter(ticker.FormatStrFormatter('$%1.f'))
+# limitations: there isn't an equivalent expand_limits so I had to use xlim and set the proper upper bound to include 
+# the Engineering outlier
+_ = plt.xlim(0, major_processed_dist_salary['Median'].max() + 1000)
+# put $ in front of Median x-axis tick labels
+_ = ax.xaxis.set_major_formatter(ticker.StrMethodFormatter('${x:,.0f}'))
 plt.tight_layout()
 plt.show()
 ```
 
-<!-- ## What are the highest earning majors?  -->
+# What are the highest earning majors?  {.tabset .tabset-fade}
 
-<!-- ```{r major_highest_earning, fig.width=10} -->
-<!-- major_processed %>% -->
-<!--     filter(Sample_size >= 100) %>% -->
-<!--     head(20) %>% -->
-<!--     ggplot(aes(Major, Median, color=Major_category)) + -->
-<!--     geom_point() +  -->
-<!--     # show intervals (range of salaries) -->
-<!--     geom_errorbar(aes(ymin = P25th, ymax = P75th)) + -->
-<!--     # geom_point doesn't start at 0 whereas geom_col does -->
-<!--     # so need to expand scale to start from 0 -->
-<!--     expand_limits(y = 0) +  -->
-<!--     scale_y_continuous(labels = dollar_format()) + -->
-<!--     coord_flip() + -->
-<!--     labs(title = "What are the highest earning majors?",  -->
-<!--         subtitle = "Top 20 majors with at least a 100 graduates surveyed. Bars represent the 25th to 75th percentile.", -->
-<!--         x = "", -->
-<!--         y = "Median salary of graduates") -->
-<!-- ``` -->
+## R
+
+```{r major_highest_earning, fig.width=20}
+major_processed %>%
+    filter(Sample_size >= 100) %>%
+    head(20) %>%
+    ggplot(aes(Major, Median, color=Major_category)) +
+    geom_point() +
+    # show intervals (range of salaries)
+    geom_errorbar(aes(ymin = P25th, ymax = P75th)) +
+    # geom_point doesn't start at 0 whereas geom_col does
+    # so need to expand scale to start from 0
+    expand_limits(y = 0) +
+    scale_y_continuous(labels = dollar_format()) +
+    coord_flip() +
+    labs(title = "What are the highest earning majors?",
+        subtitle = "Top 20 majors with at least a 100 graduates surveyed. Bars represent the 25th to 75th percentile.",
+        x = "",
+        y = "Median salary of graduates")
+```
+
+## Python
+
+## Python
+```{python warning = FALSE, message = FALSE, fig.width=20}
+major_processed_highest_earning = major_processed.copy().query('Sample_size >= 100').head(20)
+ax.clear()
+# problem: the majors on the x-axis is sorted differently in Python... 
+ax = sns.pointplot(
+      y = 'Major', 
+      x = 'Median',
+      hue = 'Major_category',
+      data = major_processed_highest_earning,
+      dodge = False,
+      join = False)
+# point plot with expanded x-axis to include 0
+_ = plt.xlim(0, major_processed_dist_salary['Median'].max() + 1000)
+# put $ in front of Median x-axis tick labels
+_ = ax.xaxis.set_major_formatter(ticker.StrMethodFormatter('${x:,.0f}'))
+# set the legend outside of the plot, slightly above the plot
+plt.legend(bbox_to_anchor = (0.75, 1.01), loc = 'lower right', borderaxespad = 0.)
+# get the lower and upper 25th/75th percentile for error bar
+lower_quartile = major_processed_highest_earning.groupby('Major')['Median'].apply(np.percentile, 25).values
+upper_quartile = major_processed_highest_earning.groupby('Major')['Median'].apply(np.percentile, 75).values
+major_processed_highest_earning.groupby('Major')['Major','Median'].head(20)
+lower_quartile
+# add error bar to each major 
+# limitation: couldn't figure out how to make color be the hue (Major_category)! :(
+plt.errorbar(
+  major_processed_highest_earning.Median, 
+  major_processed_highest_earning.Major, 
+  xerr = quartiles, capsize = 6, elinewidth = 2, linewidth = 2, fmt = 'o', ecolor='lightgrey')
+plt.tight_layout()
+plt.show()
+```
 
 <!-- ## How does gender breakdown relate to typical earnings? -->
 
