@@ -1,11 +1,6 @@
 ---
 title: "College Major & Income"
-output: 
-  html_document:
-    toc: true
-    toc_float: true
-    toc_depth: 2
-runtime: shiny
+output: html_document
 ---
 
 ```{r setup, include=FALSE}
@@ -14,9 +9,15 @@ library(reticulate)
 knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
 ```
 
-<!-- ## Language {.tabset .tabset-fade} -->
+# Motivation
 
-This is Dave's [code](https://github.com/dgrtwo/data-screencasts/blob/master/college-majors.Rmd) behind an analysis of the 538 "College Major and Income" dataset from the [#tidytuesday project](https://github.com/rfordatascience/tidytuesday/tree/master/data/2018/2018-10-16).
+I started watching David Robinson's Tidy Tuesday screencasts to learn more about data wrangling and visualization (exploratory data analysis). I also do research in teaching and learning languages, so this was a great excuse to port his R code to Python and note differences between the two.
+
+# Week 29
+
+An analysis of the 538 "College Major and Income" dataset from the [#tidytuesday project](https://github.com/rfordatascience/tidytuesday/tree/master/data/2018/2018-10-16).
+
+David's [code](https://github.com/dgrtwo/data-screencasts/blob/master/college-majors.Rmd)
 
 # Dependencies {.tabset .tabset-fade}
 
@@ -35,11 +36,22 @@ theme_set(theme_light())
 ```{python}
 import pandas as pd
 import numpy as np
+import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 import seaborn as sns
 
 pd.set_option('display.max_columns', 500)
+```
+
+```{python include = FALSE, warning = FALSE, message = FALSE}
+def clear_plots_axes():
+  try: 
+    ax.clear()
+    plt.clf()
+  except:
+    pass
+
 ```
 
 # Reading data {.tabset .tabset-fade}
@@ -89,7 +101,6 @@ major_processed[['Major', 'Median']].head(15)
 
 ## R
 ```{r}
-head(major_processed[c('Major', 'Median')], 10)
 # Common pattern: group_by -> summarize -> arrange
 by_major_category <- major_processed %>%
     filter(!is.na(Total)) %>%
@@ -112,7 +123,7 @@ by_major_category
 # declared within the agg() like you could with R's summerise
 
 # Workaround (which is actually fewer lines):
-# For now, setting with breaking things up into statements
+# For now, settling with breaking things up into statements
 by_major_category_grp = major_processed[major_processed.Total.notnull()].groupby('Major_category')
 # Do the groupby / sum on the Men, Women, Total
 by_major_category = by_major_category_grp['Men', 'Women', 'Total'].sum()
@@ -146,6 +157,7 @@ major_processed %>%
 
 ## Python
 ```{python warning = FALSE, message = FALSE}
+clear_plots_axes()
 major_processed_dist_salary = major_processed.copy()
 # reorder Major_category according to the Median (top -> highest salary)
 # I'm sure there's a better way, but one way to replicate `fct_reorder` is to do a groupby -> agg -> sort_values
@@ -162,6 +174,7 @@ ax = sns.boxplot(
 _ = plt.xlim(0, major_processed_dist_salary['Median'].max() + 1000)
 # put $ in front of Median x-axis tick labels
 _ = ax.xaxis.set_major_formatter(ticker.StrMethodFormatter('${x:,.0f}'))
+ax.grid(True)
 plt.tight_layout()
 plt.show()
 ```
@@ -190,7 +203,12 @@ major_processed %>%
 ```
 
 ## Python
+```{python include=FALSE}
+clear_plots_axes()
+```
+
 ```{python warning = FALSE, message = FALSE}
+sns.set_style('whitegrid')
 major_processed_highest_earning = major_processed.copy().query('Sample_size >= 100').head(20)
 # problem: the majors on the x-axis is sorted differently in Python and the error bars don't look right
 ax = sns.pointplot(
@@ -205,49 +223,98 @@ _ = plt.xlim(0, major_processed_dist_salary['Median'].max() + 1000)
 # put $ in front of Median x-axis tick labels
 _ = ax.xaxis.set_major_formatter(ticker.StrMethodFormatter('${x:,.0f}'))
 # set the legend outside of the plot, slightly above the plot
-_ = plt.legend(bbox_to_anchor = (1.05, .0), loc = 'lower right', borderaxespad = 0.)
+_ = plt.legend(bbox_to_anchor = (1.8, .0), loc = 'lower center', borderaxespad = 4.)
 # get the lower and upper 25th/75th percentile for error bar (not sure if this is the way) did the *.25 to make bars smaller
 lower_quartile = major_processed_highest_earning.groupby('Major')['Median'].apply(np.percentile, 25).values*.25
 upper_quartile = major_processed_highest_earning.groupby('Major')['Median'].apply(np.percentile, 75).values*.25
 quartiles = [lower_quartile, upper_quartile]
 # add error bar to each major 
 # limitation: couldn't figure out how to make color be the hue (Major_category)! :(
+# possible solution: https://stackoverflow.com/a/21915157
+# another discrepancy: some of the 
 _ = plt.errorbar(
       major_processed_highest_earning.Median, 
       major_processed_highest_earning.Major, 
-      xerr = quartiles, capsize = 6, elinewidth = 2, linewidth = 2, fmt = 'o', ecolor='lightgrey')
+      xerr = quartiles, capsize = 6, elinewidth = 2, linewidth = 2, fmt = 'none', ecolor='lightgrey')
+# title (https://stackoverflow.com/a/52937244)
+_ = ax.text(x = 0.5, y = 1.1, s = 'What are the highest earning majors?', fontsize = 20, weight = 'bold', ha = 'center', va = 'bottom', transform = ax.transAxes)
+# subtitle
+_ = ax.text(x = 0.5, y = 1.05, s = 'Top 20 majors with at least a 100 graduates surveyed. Bars represent the 25th to 75th percentile.', fontsize = 12, alpha = 0.75, ha = 'center', va = 'bottom', transform = ax.transAxes)
+plt.tight_layout()
 plt.show()
 ```
 
-<!-- ## How does gender breakdown relate to typical earnings? -->
+# How does gender breakdown relate to typical earnings? {.tabset .tabset-fade}
 
-<!-- ```{r} -->
-<!-- major_processed %>% -->
-<!--     arrange(desc(Total)) %>% -->
-<!--     head(20) %>% -->
-<!--     mutate(Major = fct_reorder(Major, Total)) %>% -->
-<!--     # `gather` will collapse the two columns (Women, Men) into a single Gender column where value is n  -->
-<!--     # extra observations are added to df as a consequence -->
-<!--     gather(Gender, Number, Women, Men) %>% -->
-<!--     ggplot(aes(Major, Number, fill = Gender)) + -->
-<!--     scale_y_continuous(labels = comma_format()) + -->
-<!--     geom_col() + -->
-<!--     coord_flip() -->
-<!-- ``` -->
+## R
+```{r fig.width=12}
+major_processed %>%
+    arrange(desc(Total)) %>%
+    head(20) %>%
+    mutate(Major = fct_reorder(Major, Total)) %>%
+    # `gather` collapses the two columns (Women, Men) into a single Gender and value is Number
+    gather(Gender, Number, Women, Men) %>%
+    ggplot(aes(Major, Number, fill = Gender)) +
+    scale_y_continuous(labels = comma_format()) +
+    geom_col() +
+    coord_flip()
+```
 
-<!-- ```{r fig.width=8} -->
-<!-- g <- major_processed %>% -->
-<!--     mutate(Major_category = fct_lump(Major_category, 4)) %>%  -->
-<!--     # the size gives a sense of what is a outlier or not -->
-<!--     ggplot(aes(ShareWomen, Median, color = Major_category, size = Sample_size, label = Major)) + -->
-<!--     geom_point() + -->
-<!--     scale_x_continuous(labels = percent_format()) + -->
-<!--     scale_y_continuous(labels = dollar_format()) + -->
-<!--     geom_smooth(aes(group = 1), method = "lm") + -->
-<!--     expand_limits(y = 0) -->
-<!-- # interactive graph to show each one of the aes -->
-<!-- ggplotly(g) -->
-<!-- ``` -->
+## Python
+```{python message=FALSE, warning=FALSE, fig.width = 12, fig.align="left"}
+sns.set_style("whitegrid")
+major_processed_gender = major_processed.copy()
+major_processed_gender['total'] = major_processed_gender.Men + major_processed_gender.Women
+major_processed_gender = major_processed_gender.sort_values(by='Total', ascending = False).head(20)
+cat_order = major_processed_gender.groupby('Major').agg('median').sort_values('Total', ascending=False).index.values.tolist()
+_ = plt.xlim(0, major_processed_gender['total'].max() + 10000, 100000)
+_ = ax.xaxis.set_major_formatter(ticker.StrMethodFormatter('{x:,.0f}'))
+# this is a simple way to do stacked bar chart: barplot with total first
+ax = sns.barplot(y = 'Major', x = 'total', data = major_processed_gender, order = cat_order, label = 'Men', color='#f8766d')
+# then barplot with overlaying variable on top
+ax = sns.barplot(y = 'Major', x = 'Women', label = 'Women', data = major_processed_gender, order = cat_order, color="#01bfc4")
+# need to set legend and label since we didn't make use of the `hue` parameter to do our fill
+_ = ax.legend(ncol = 2, frameon = False, fontsize = 'large')
+_ = ax.set(xlabel="Number")
+# plt.tight_layout()
+plt.show()
+```
+
+<!-- # This is an alternate way to do the gather way but the downside is you can't do a geom_col in seaborn -->
+<!-- # .melt( -->
+<!-- #   # `melt` is the analogue to R's `gather` -->
+<!-- #   # you need to explicitly tell `melt` what other variables to include which you do via `id_vars` -->
+<!-- #   # numpy's mask allows us to do that easily -->
+<!-- #   id_vars = major_processed_gender.columns[~major_processed_gender.columns.isin(['Women','Men'])], -->
+<!-- #   value_vars=['Women','Men'], -->
+<!-- #   var_name='Gender', -->
+<!-- #   value_name='Number' -->
+<!-- # ) -->
+
+# Interactive line / scatter plot showing the ShareWomen by Median salary {.tabset .tabset-fade}
+
+## R 
+
+```{r fig.width=8}
+g <- major_processed %>%
+    mutate(Major_category = fct_lump(Major_category, 4)) %>%
+    # the size gives a sense of what is a outlier or not
+    ggplot(aes(ShareWomen, Median, color = Major_category, size = Sample_size, label = Major)) +
+    geom_point() +
+    scale_x_continuous(labels = percent_format()) +
+    scale_y_continuous(labels = dollar_format()) +
+    geom_smooth(aes(group = 1), method = "lm") +
+    expand_limits(y = 0)
+# interactive graph to show each one of the aes
+ggplotly(g)
+```
+
+## Python
+```{python message=FALSE, warning=FALSE}
+sns.set_style("whitegrid")
+major_processed_gender = major_processed.copy()
+
+```
 
 <!-- ```{r} -->
 <!-- # every percentage pt a field is male, the expected salary would decrease by 23650 / 100 => ~$237 -->
@@ -277,96 +344,96 @@ plt.show()
 <!--   mutate(fdr = p.adjust(p.value, method = "fdr")) -->
 <!-- ``` -->
 
-<!-- ### Appendix -->
+# Appendix
 
 
-<!-- ```{r} -->
-<!-- major_processed %>% -->
-<!--     filter(Sample_size >= 100) %>% -->
-<!--     ggplot(aes(Sample_size, Median)) + -->
-<!--     geom_point() + -->
-<!--     geom_text(aes(label = Major), check_overlap = TRUE, vjust = 1, hjust = 1) + -->
-<!--     scale_x_log10() -->
-<!-- ``` -->
+```{r}
+major_processed %>%
+    filter(Sample_size >= 100) %>%
+    ggplot(aes(Sample_size, Median)) +
+    geom_point() +
+    geom_text(aes(label = Major), check_overlap = TRUE, vjust = 1, hjust = 1) +
+    scale_x_log10()
+```
 
-<!-- ```{r} -->
-<!-- # this is so that the rest of the Rmd gets ignored  -->
-<!-- knitr::knit_exit() -->
-<!-- ``` -->
+```{r include=FALSE}
+# this is so that the rest of the Rmd gets ignored
+knitr::knit_exit()
+```
 
-<!-- Scrap -->
+Scrap
 
-<!-- ```{r} -->
-<!-- major_processed %>%  -->
-<!--   filter(Sample_size >= 100) %>%  -->
-<!--   mutate(IQR = P75th - P25th) %>%  -->
-<!--   arrange(desc(IQR)) %>%  -->
-<!--   View() -->
-<!-- ``` -->
+```{r}
+major_processed %>%
+  filter(Sample_size >= 100) %>%
+  mutate(IQR = P75th - P25th) %>%
+  arrange(desc(IQR)) %>%
+  View()
+```
 
 
-<!-- ## Most common major -->
+## Most common major
 
-<!-- What were the most common **majors**? (since there were 173 we're only showing some) -->
+What were the most common **majors**? (since there were 173 we're only showing some)
 
-<!-- ```{r common_majors, fig.width=10} -->
-<!-- major_processed %>% -->
-<!--     mutate(Major = fct_reorder(Major, Total)) %>% -->
-<!--     arrange(desc(Total)) %>% -->
-<!--     head(20) %>% -->
-<!--     ggplot(aes(Major, Total, fill = Major_category)) + -->
-<!--     geom_col() + -->
-<!--     coord_flip() + -->
-<!--     scale_y_continuous(labels = comma_format()) + -->
-<!--     labs(x = "", -->
-<!--         y = "Total # of graduates") -->
-<!-- ``` -->
+```{r common_majors, fig.width=10}
+major_processed %>%
+    mutate(Major = fct_reorder(Major, Total)) %>%
+    arrange(desc(Total)) %>%
+    head(20) %>%
+    ggplot(aes(Major, Total, fill = Major_category)) +
+    geom_col() +
+    coord_flip() +
+    scale_y_continuous(labels = comma_format()) +
+    labs(x = "",
+        y = "Total # of graduates")
+```
 
-<!-- ## Most common major categories -->
+## Most common major categories
 
-<!-- What major categories were most common? -->
+What major categories were most common?
 
-<!-- ```{r} -->
-<!-- major_processed %>% -->
-<!--     count(Major_category, wt = Total, sort = TRUE) %>% -->
-<!--     mutate(Major_category = fct_reorder(Major_category, n)) %>% -->
-<!--     ggplot(aes(Major_category, n, fill = Major_category)) + -->
-<!--     geom_col() + -->
-<!--     coord_flip() + -->
-<!--     labs(x = "", -->
-<!--         y = "Total # of graduates") + -->
-<!--     theme(legend.position = "none") -->
-<!-- ``` -->
+```{r}
+major_processed %>%
+    count(Major_category, wt = Total, sort = TRUE) %>%
+    mutate(Major_category = fct_reorder(Major_category, n)) %>%
+    ggplot(aes(Major_category, n, fill = Major_category)) +
+    geom_col() +
+    coord_flip() +
+    labs(x = "",
+        y = "Total # of graduates") +
+    theme(legend.position = "none")
+```
 
-<!-- ```{r} -->
-<!-- # visualize the distribution of salary for each major using bar -->
-<!-- major_processed %>% -->
-<!--     group_by(Major_category) %>% -->
-<!--     summarize(Median = median(Median)) %>% -->
-<!--     mutate(Major_category = fct_reorder(Major_category, Median)) %>% -->
-<!--     ggplot(aes(Major_category, Median)) + -->
-<!--     geom_col() + -->
-<!--     scale_y_continuous(labels = dollar_format()) + -->
-<!--     coord_flip() -->
-<!-- ``` -->
+```{r}
+# visualize the distribution of salary for each major using bar
+major_processed %>%
+    group_by(Major_category) %>%
+    summarize(Median = median(Median)) %>%
+    mutate(Major_category = fct_reorder(Major_category, Median)) %>%
+    ggplot(aes(Major_category, Median)) +
+    geom_col() +
+    scale_y_continuous(labels = dollar_format()) +
+    coord_flip()
+```
 
-<!-- ## What are the lowest earning majors? -->
+## What are the lowest earning majors?
 
-<!-- ```{r major_lowest_earning, fig.width=10} -->
-<!-- major_processed %>% -->
-<!--     filter(Sample_size >= 100) %>% -->
-<!--     tail(20) %>% -->
-<!--     ggplot(aes(Major, Median, color=Major_category)) + -->
-<!--     geom_point() +  -->
-<!--     # show intervals (range of salaries) -->
-<!--     geom_errorbar(aes(ymin = P25th, ymax = P75th)) + -->
-<!--     # geom_point doesn't start at 0 whereas geom_col does -->
-<!--     # so need to expand scale to start from 0 -->
-<!--     expand_limits(y = 0) +  -->
-<!--     coord_flip() + -->
-<!--     labs(title = "What are the lowest earning majors?",  -->
-<!--         subtitle = "Bottom 20 majors with at least a 100 graduates surveyed. Bars represent the 25th to 75th percentile.", -->
-<!--         x = "", -->
-<!--         y = "Median salary of graduates") -->
-<!-- ``` -->
+```{r major_lowest_earning, fig.width=10}
+major_processed %>%
+    filter(Sample_size >= 100) %>%
+    tail(20) %>%
+    ggplot(aes(Major, Median, color=Major_category)) +
+    geom_point() +
+    # show intervals (range of salaries)
+    geom_errorbar(aes(ymin = P25th, ymax = P75th)) +
+    # geom_point doesn't start at 0 whereas geom_col does
+    # so need to expand scale to start from 0
+    expand_limits(y = 0) +
+    coord_flip() +
+    labs(title = "What are the lowest earning majors?",
+        subtitle = "Bottom 20 majors with at least a 100 graduates surveyed. Bars represent the 25th to 75th percentile.",
+        x = "",
+        y = "Median salary of graduates")
+```
 
