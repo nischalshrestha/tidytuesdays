@@ -44,14 +44,13 @@ import seaborn as sns
 pd.set_option('display.max_columns', 500)
 ```
 
-```{python include = FALSE, warning = FALSE, message = FALSE}
+```{python message=FALSE, warning=FALSE, include=FALSE}
 def clear_plots_axes():
   try: 
     ax.clear()
     plt.clf()
   except:
     pass
-
 ```
 
 # Reading data {.tabset .tabset-fade}
@@ -203,11 +202,9 @@ major_processed %>%
 ```
 
 ## Python
-```{python include=FALSE}
-clear_plots_axes()
-```
 
-```{python warning = FALSE, message = FALSE}
+```{python warning = FALSE, message = FALSE, fig.width = 15}
+clear_plots_axes()
 sns.set_style('whitegrid')
 major_processed_highest_earning = major_processed.copy().query('Sample_size >= 100').head(20)
 # problem: the majors on the x-axis is sorted differently in Python and the error bars don't look right
@@ -240,7 +237,7 @@ _ = plt.errorbar(
 _ = ax.text(x = 0.5, y = 1.1, s = 'What are the highest earning majors?', fontsize = 20, weight = 'bold', ha = 'center', va = 'bottom', transform = ax.transAxes)
 # subtitle
 _ = ax.text(x = 0.5, y = 1.05, s = 'Top 20 majors with at least a 100 graduates surveyed. Bars represent the 25th to 75th percentile.', fontsize = 12, alpha = 0.75, ha = 'center', va = 'bottom', transform = ax.transAxes)
-plt.tight_layout()
+# plt.tight_layout()
 plt.show()
 ```
 
@@ -270,13 +267,13 @@ cat_order = major_processed_gender.groupby('Major').agg('median').sort_values('T
 _ = plt.xlim(0, major_processed_gender['total'].max() + 10000, 100000)
 _ = ax.xaxis.set_major_formatter(ticker.StrMethodFormatter('{x:,.0f}'))
 # this is a simple way to do stacked bar chart: barplot with total first
-ax = sns.barplot(y = 'Major', x = 'total', data = major_processed_gender, order = cat_order, label = 'Men', color='#f8766d')
+ax = sns.barplot(y = 'Major', x = 'total', data = major_processed_gender, order = cat_order, label = 'Men', color='salmon')
 # then barplot with overlaying variable on top
-ax = sns.barplot(y = 'Major', x = 'Women', label = 'Women', data = major_processed_gender, order = cat_order, color="#01bfc4")
+ax = sns.barplot(y = 'Major', x = 'Women', label = 'Women', data = major_processed_gender, order = cat_order, color='cyan')
 # need to set legend and label since we didn't make use of the `hue` parameter to do our fill
 _ = ax.legend(ncol = 2, frameon = False, fontsize = 'large')
 _ = ax.set(xlabel="Number")
-# plt.tight_layout()
+plt.tight_layout()
 plt.show()
 ```
 
@@ -303,17 +300,43 @@ g <- major_processed %>%
     geom_point() +
     scale_x_continuous(labels = percent_format()) +
     scale_y_continuous(labels = dollar_format()) +
-    geom_smooth(aes(group = 1), method = "lm") +
+    geom_smooth(method = "lm") +
     expand_limits(y = 0)
-# interactive graph to show each one of the aes
 ggplotly(g)
 ```
 
-## Python
-```{python message=FALSE, warning=FALSE}
-sns.set_style("whitegrid")
-major_processed_gender = major_processed.copy()
+<!-- from pandas import datetime -->
+<!-- 
 
+major_processed_gender = major_processed_gender[major_processed_gender['ShareWomen'].notnull()] 
+
+
+-->
+
+## Python
+```{python message=TRUE, warning=TRUE}
+from siuba.dply.forcats import fct_lump
+from plotly.express import scatter
+
+sns.set_style('whitegrid')
+major_processed_gender = major_processed.copy()
+major_processed_gender['Major_category'] = fct_lump(major_processed_gender['Major_category'], 4)
+# Python doesn't have a package which would allow us to pass in a matplotlib or seaborn object
+# However, this is actually ok because the plotly code is much much simpler!
+plot = scatter(
+  major_processed_gender,
+  x = 'ShareWomen', 
+  y = 'Median',
+  size = 'Sample_size', # R's aes size
+  size_max = 40,
+  hover_name = 'Major', # R's aes label
+  # Note: plotly for Python does not seem to have alphanumeric ordering for categories (R's default)
+  color = 'Major_category'
+)
+# make x-axis be % format, y-axis be $ format
+_ = plot.update_layout(xaxis = dict(tickformat = '.0%'), yaxis = dict(tickformat = '${x:,.0f}')) 
+# currently RStudio cannot render plot directly here but will open plotly in browser
+plot.show()
 ```
 
 <!-- ```{r} -->
@@ -345,7 +368,6 @@ major_processed_gender = major_processed.copy()
 <!-- ``` -->
 
 # Appendix
-
 
 ```{r}
 major_processed %>%
